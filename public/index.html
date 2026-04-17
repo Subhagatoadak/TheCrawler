@@ -608,6 +608,61 @@
     .report-content a:hover { text-decoration: underline; }
 
     /* ── Screenshots ────────────────────────────── */
+    .shots-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 22px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(147,51,234,0.06);
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+
+    .shots-toolbar.hidden { display: none; }
+
+    .sel-count {
+      color: var(--purple-l);
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .sel-action {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      transition: color 0.15s;
+    }
+    .sel-action:hover { color: var(--text); }
+
+    .sel-sep { color: var(--border); font-size: 16px; }
+
+    .btn-dl-sel {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, #7c3aed 0%, #0891b2 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 13px;
+      cursor: pointer;
+      box-shadow: 0 0 14px rgba(124,58,237,0.3);
+      transition: opacity 0.15s, box-shadow 0.2s;
+    }
+    .btn-dl-sel:hover { opacity: 0.88; box-shadow: 0 0 22px rgba(124,58,237,0.5); }
+    .btn-dl-sel:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+
     .shots-wrap { padding: 22px; }
     .shot-grid {
       display: grid;
@@ -619,9 +674,15 @@
       background: var(--surface-2);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      overflow: hidden;
+      overflow: visible;
       cursor: zoom-in;
       transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+      position: relative;
+    }
+
+    .shot-card-inner {
+      border-radius: var(--radius);
+      overflow: hidden;
     }
 
     .shot-card:hover {
@@ -629,6 +690,42 @@
       transform: translateY(-3px);
       box-shadow: 0 8px 32px rgba(147,51,234,0.2), 0 0 0 1px rgba(147,51,234,0.2);
     }
+
+    .shot-card.selected {
+      border-color: var(--purple) !important;
+      box-shadow: 0 0 0 2px rgba(147,51,234,0.4), 0 8px 32px rgba(147,51,234,0.25) !important;
+    }
+
+    .shot-check {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.3);
+      background: rgba(10,14,28,0.8);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 3;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s, border-color 0.15s, transform 0.15s;
+      transform: scale(0.8);
+    }
+
+    .shot-card:hover .shot-check,
+    .shot-card.selected .shot-check { opacity: 1; transform: scale(1); }
+
+    .shot-card.selected .shot-check {
+      background: var(--purple);
+      border-color: var(--purple);
+      box-shadow: 0 0 10px rgba(147,51,234,0.5);
+    }
+
+    .shot-check svg { pointer-events: none; }
 
     .shot-card img {
       width: 100%;
@@ -640,6 +737,7 @@
       transition: filter 0.2s;
     }
 
+    .shot-card.selected img { filter: saturate(1.05) brightness(1); }
     .shot-card:hover img { filter: saturate(1.1) brightness(1.05); }
 
     .shot-label {
@@ -903,6 +1001,17 @@
       <div class="report-wrap"><div class="report-content" id="report-content"></div></div>
     </div>
     <div class="tab-panel" id="tab-screenshots">
+      <div class="shots-toolbar hidden" id="shots-toolbar">
+        <span class="sel-count" id="sel-count">0 selected</span>
+        <span class="sel-sep">·</span>
+        <button class="sel-action" id="sel-all-btn">Select all</button>
+        <span class="sel-sep">·</span>
+        <button class="sel-action" id="sel-clear-btn">Clear</button>
+        <button class="btn-dl-sel" id="sel-download-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zm-8 2V5h2v6h1.17L12 13.17 9.83 11H11zm-6 8h14v2H5z"/></svg>
+          Download selected
+        </button>
+      </div>
       <div class="shots-wrap"><div class="shot-grid" id="shot-grid"></div></div>
     </div>
     <div class="tab-panel" id="tab-raw">
@@ -1177,6 +1286,72 @@
     } catch {}
   }
 
+  // ── Screenshot selection ───────────────────────
+  const selected = new Set();
+  let allFiles   = [];
+
+  function updateToolbar() {
+    const n = selected.size;
+    const toolbar = $('shots-toolbar');
+    toolbar.classList.toggle('hidden', n === 0);
+    $('sel-count').textContent = `${n} selected`;
+  }
+
+  function toggleCard(card, filename) {
+    if (selected.has(filename)) {
+      selected.delete(filename);
+      card.classList.remove('selected');
+      card.querySelector('.shot-check svg').style.opacity = '0';
+    } else {
+      selected.add(filename);
+      card.classList.add('selected');
+      card.querySelector('.shot-check svg').style.opacity = '1';
+    }
+    updateToolbar();
+  }
+
+  $('sel-all-btn').addEventListener('click', () => {
+    allFiles.forEach(f => {
+      selected.add(f);
+      const card = document.querySelector(`.shot-card[data-file="${CSS.escape(f)}"]`);
+      if (card) { card.classList.add('selected'); card.querySelector('.shot-check svg').style.opacity = '1'; }
+    });
+    updateToolbar();
+  });
+
+  $('sel-clear-btn').addEventListener('click', () => {
+    selected.clear();
+    document.querySelectorAll('.shot-card.selected').forEach(c => {
+      c.classList.remove('selected');
+      c.querySelector('.shot-check svg').style.opacity = '0';
+    });
+    updateToolbar();
+  });
+
+  $('sel-download-btn').addEventListener('click', async () => {
+    if (!selected.size) return;
+    const btn = $('sel-download-btn');
+    btn.disabled = true;
+    btn.textContent = 'Zipping…';
+    try {
+      const res = await fetch('/api/export/selected', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: [...selected] }),
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `screenshots-${new Date().toISOString().slice(0,10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zm-8 2V5h2v6h1.17L12 13.17 9.83 11H11zm-6 8h14v2H5z"/></svg>Download selected`;
+  });
+
   // ── Load Results ───────────────────────────────
   async function loadResults() {
     resultsCard.classList.remove('hidden');
@@ -1189,16 +1364,33 @@
       const r = await fetch('/api/screenshots');
       if (r.ok) {
         const files = await r.json();
-        const grid  = $('shot-grid');
+        allFiles = files;
+        selected.clear();
+        updateToolbar();
+        const grid = $('shot-grid');
         grid.innerHTML = '';
         if (!files.length) {
           grid.innerHTML = '<div style="text-align:center;padding:48px;color:var(--muted);font-size:13px;">No screenshots captured.</div>';
         } else {
           files.forEach(f => {
-            const card = document.createElement('div');
-            card.className = 'shot-card';
+            const card  = document.createElement('div');
             const label = f.replace(/__/g, ' › ').replace('.png', '');
-            card.innerHTML = `<img src="/screenshots/${encodeURIComponent(f)}" alt="${label}" loading="lazy" /><div class="shot-label">${label}</div>`;
+            card.className  = 'shot-card';
+            card.dataset.file = f;
+            card.innerHTML = `
+              <div class="shot-check" title="Select">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="white" style="opacity:0">
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                </svg>
+              </div>
+              <div class="shot-card-inner">
+                <img src="/screenshots/${encodeURIComponent(f)}" alt="${label}" loading="lazy" />
+                <div class="shot-label">${label}</div>
+              </div>`;
+            card.querySelector('.shot-check').addEventListener('click', e => {
+              e.stopPropagation();
+              toggleCard(card, f);
+            });
             card.querySelector('img').addEventListener('click', () => openLightbox(`/screenshots/${encodeURIComponent(f)}`));
             grid.appendChild(card);
           });

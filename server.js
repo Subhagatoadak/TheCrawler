@@ -197,6 +197,37 @@ app.get('/api/history', (req, res) => {
   res.json(loadHistory());
 });
 
+// ── Export selected screenshots ──────────────────
+app.post('/api/export/selected', (req, res) => {
+  const { files } = req.body;
+  if (!Array.isArray(files) || !files.length) {
+    return res.status(400).json({ error: 'No files specified' });
+  }
+
+  const shotDir = path.join(__dirname, 'output', 'screenshots');
+
+  // Sanitise: only allow plain .png filenames that actually exist
+  const safe = files.filter(f =>
+    typeof f === 'string' &&
+    /^[\w\-. ]+\.png$/i.test(f) &&
+    fs.existsSync(path.join(shotDir, f))
+  );
+
+  if (!safe.length) {
+    return res.status(400).json({ error: 'No valid files found' });
+  }
+
+  const date = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="screenshots-${date}.zip"`);
+
+  const archive = archiver('zip', { zlib: { level: 6 } });
+  archive.on('error', () => res.status(500).end());
+  archive.pipe(res);
+  safe.forEach(f => archive.file(path.join(shotDir, f), { name: f }));
+  archive.finalize();
+});
+
 // ── Export (zip download) ────────────────────────
 app.get('/api/export', (req, res) => {
   const outDir = path.join(__dirname, 'output');
