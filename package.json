@@ -1,0 +1,15 @@
+{
+  "name": "web-vision-agent",
+  "version": "2.0.0",
+  "description": "Crawl, screenshot and analyse any website with Claude Vision",
+  "main": "agent.js",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "playwright": "^1.59.1",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
