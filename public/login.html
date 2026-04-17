@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — The Crawler</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #03040a;
+      --surface:  rgba(10, 14, 28, 0.9);
+      --border:   rgba(100, 80, 200, 0.2);
+      --muted:    #3d4460;
+      --text-muted: #7c86a8;
+      --text:     #dde3f8;
+      --purple:   #9333ea;
+      --purple-l: #c084fc;
+      --cyan:     #22d3ee;
+      --red:      #f43f5e;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    /* ── Spider web background ───────────────────── */
+    #web-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── Card ────────────────────────────────────── */
+    .card {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 400px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 44px 40px 40px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow:
+        0 0 0 1px rgba(147,51,234,0.08),
+        0 20px 60px rgba(0,0,0,0.5),
+        0 0 80px rgba(147,51,234,0.06);
+    }
+
+    /* Top glow line */
+    .card::before {
+      content: '';
+      position: absolute;
+      top: -1px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 160px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--purple), var(--cyan), transparent);
+      border-radius: 50%;
+    }
+
+    /* ── Brand ───────────────────────────────────── */
+    .brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+
+    .logo {
+      width: 52px;
+      height: 52px;
+      background: linear-gradient(135deg, #7c3aed 0%, #0891b2 100%);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 24px rgba(124,58,237,0.5), 0 0 60px rgba(124,58,237,0.2);
+      animation: logo-breathe 3s ease-in-out infinite;
+    }
+
+    @keyframes logo-breathe {
+      0%, 100% { box-shadow: 0 0 24px rgba(124,58,237,0.5), 0 0 60px rgba(124,58,237,0.15); }
+      50%       { box-shadow: 0 0 36px rgba(124,58,237,0.7), 0 0 80px rgba(8,145,178,0.25); }
+    }
+
+    .logo svg { width: 26px; height: 26px; }
+
+    .app-name {
+      font-size: 22px;
+      font-weight: 700;
+      background: linear-gradient(90deg, #c084fc 0%, #22d3ee 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.02em;
+    }
+
+    .app-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* ── Form ────────────────────────────────────── */
+    .form { display: flex; flex-direction: column; gap: 16px; }
+
+    .field { display: flex; flex-direction: column; gap: 7px; }
+
+    label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    input {
+      background: rgba(3,4,10,0.8);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      padding: 11px 16px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      width: 100%;
+    }
+
+    input::placeholder { color: var(--muted); }
+
+    input:focus {
+      border-color: var(--purple);
+      box-shadow: 0 0 0 3px rgba(147,51,234,0.15), 0 0 20px rgba(147,51,234,0.1);
+    }
+
+    input.error {
+      border-color: var(--red);
+      box-shadow: 0 0 0 3px rgba(244,63,94,0.12);
+    }
+
+    /* ── Button ──────────────────────────────────── */
+    .btn {
+      width: 100%;
+      background: linear-gradient(135deg, #7c3aed 0%, #0891b2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px;
+      margin-top: 4px;
+      cursor: pointer;
+      box-shadow: 0 0 24px rgba(124,58,237,0.35);
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:hover:not(:disabled) {
+      opacity: 0.9;
+      box-shadow: 0 0 36px rgba(124,58,237,0.5), 0 0 12px rgba(8,145,178,0.3);
+    }
+    .btn:active:not(:disabled) { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+
+    /* ── Error msg ───────────────────────────────── */
+    .error-msg {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(244,63,94,0.08);
+      border: 1px solid rgba(244,63,94,0.25);
+      border-radius: 8px;
+      padding: 10px 13px;
+      font-size: 13px;
+      color: #fb7185;
+      margin-top: 2px;
+    }
+
+    .error-msg.hidden { display: none; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<canvas id="web-canvas"></canvas>
+
+<div class="card">
+  <div class="brand">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <line x1="12" y1="0" x2="12" y2="5.2" stroke="white" stroke-width="1" stroke-linecap="round"/>
+        <circle cx="12" cy="7.8" r="2.4" fill="white"/>
+        <ellipse cx="12" cy="15" rx="4" ry="5" fill="white"/>
+        <line x1="8.5" y1="10.5" x2="2"  y2="7"    stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="8"   y1="13"   x2="1"  y2="12"   stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="8"   y1="16"   x2="2"  y2="17.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="9"   y1="18.5" x2="4"  y2="21.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="15.5" y1="10.5" x2="22" y2="7"    stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="16"   y1="13"   x2="23" y2="12"   stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="16"   y1="16"   x2="22" y2="17.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="15"   y1="18.5" x2="20" y2="21.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="app-name">The Crawler</span>
+    <span class="app-sub">Sign in to continue</span>
+  </div>
+
+  <form class="form" id="login-form" autocomplete="on">
+    <div class="field">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" placeholder="admin" autocomplete="username" required />
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required />
+    </div>
+
+    <div class="error-msg hidden" id="error-msg">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+      </svg>
+      <span id="error-text">Invalid username or password.</span>
+    </div>
+
+    <button type="submit" class="btn" id="submit-btn">Sign In</button>
+  </form>
+</div>
+
+<script>
+  // ── Spider web background ─────────────────────
+  const canvas = document.getElementById('web-canvas');
+  const ctx    = canvas.getContext('2d');
+  let angle    = 0;
+
+  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+
+  function draw() {
+    const w = canvas.width, h = canvas.height;
+    const cx = w / 2, cy = h / 2;
+    const maxR = Math.sqrt(cx * cx + cy * cy) * 1.2;
+    const spokes = 16, rings = 10;
+
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.strokeStyle = 'rgba(124, 58, 237, 0.08)';
+    ctx.lineWidth = 0.6;
+    for (let i = 0; i < spokes; i++) {
+      const a = (i / spokes) * Math.PI * 2 + angle;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * maxR, cy + Math.sin(a) * maxR);
+      ctx.stroke();
+    }
+
+    for (let r = 1; r <= rings; r++) {
+      const radius = (r / rings) * maxR;
+      ctx.strokeStyle = `rgba(124, 58, 237, ${0.04 + (r / rings) * 0.03})`;
+      ctx.beginPath();
+      for (let i = 0; i <= spokes; i++) {
+        const a = (i / spokes) * Math.PI * 2 + angle;
+        const x = cx + Math.cos(a) * radius;
+        const y = cy + Math.sin(a) * radius;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    angle += 0.0001;
+    requestAnimationFrame(draw);
+  }
+
+  resize();
+  window.addEventListener('resize', resize);
+  draw();
+
+  // ── Login form ────────────────────────────────
+  const form       = document.getElementById('login-form');
+  const submitBtn  = document.getElementById('submit-btn');
+  const errorMsg   = document.getElementById('error-msg');
+  const errorText  = document.getElementById('error-text');
+  const userInput  = document.getElementById('username');
+  const passInput  = document.getElementById('password');
+
+  function setError(msg) {
+    errorText.textContent = msg;
+    errorMsg.classList.remove('hidden');
+    userInput.classList.add('error');
+    passInput.classList.add('error');
+  }
+
+  function clearError() {
+    errorMsg.classList.add('hidden');
+    userInput.classList.remove('error');
+    passInput.classList.remove('error');
+  }
+
+  [userInput, passInput].forEach(el => el.addEventListener('input', clearError));
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearError();
+    const username = userInput.value.trim();
+    const password = passInput.value;
+    if (!username || !password) { setError('Please enter your username and password.'); return; }
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="animation:spin 0.9s linear infinite">
+        <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/>
+      </svg> Signing in…`;
+
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      if (res.ok) {
+        window.location.href = '/';
+      } else {
+        const { error } = await res.json().catch(() => ({ error: 'Login failed' }));
+        setError(error || 'Invalid credentials.');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'Sign In';
+      }
+    } catch {
+      setError('Could not reach the server.');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = 'Sign In';
+    }
+  });
+</script>
+</body>
+</html>

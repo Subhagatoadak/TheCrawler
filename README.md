@@ -1,4 +1,4 @@
-# 🕵️ Web Vision Agent
+# 🕵️ The Crawler
 
 A fully automated agent that:
 1. **Crawls** all pages connected to a starting URL

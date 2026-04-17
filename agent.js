@@ -20,7 +20,14 @@ chromium.use(StealthPlugin());
 const TARGET_URL = process.argv[2];
 const MAX_PAGES   = parseInt((process.argv.find(a => a.startsWith("--max-pages=")) || "=30").split("=")[1]);
 const SAME_DOMAIN = process.argv.includes("--same-domain");
-const VISIBLE     = process.argv.includes("--visible"); // add this flag to watch the browser
+const VISIBLE     = process.argv.includes("--visible");
+
+// Site authentication (passed via env vars from the web UI)
+const SITE_LOGIN_URL      = process.env.SITE_LOGIN_URL      || null;
+const SITE_USERNAME       = process.env.SITE_USERNAME       || null;
+const SITE_PASSWORD       = process.env.SITE_PASSWORD       || null;
+const SITE_USERNAME_FIELD = process.env.SITE_USERNAME_FIELD || null;
+const SITE_PASSWORD_FIELD = process.env.SITE_PASSWORD_FIELD || null;
 
 const OUT_DIR     = path.join(__dirname, "output");
 const SHOT_DIR    = path.join(OUT_DIR, "screenshots");
@@ -54,18 +61,82 @@ async function makeBrowser() {
   });
 }
 
-async function makeContext(browser) {
+async function makeContext(browser, storageState = null) {
   const ctx = await browser.newContext({
     viewport:  { width: 1440, height: 900 },
     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     locale: "en-US",
     extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
+    ...(storageState ? { storageState } : {}),
   });
-  // Hide webdriver flag
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
   });
   return ctx;
+}
+
+// ─── Phase 0: Site Login ──────────────────────────────────────────────────────
+async function loginToSite() {
+  if (!SITE_LOGIN_URL || !SITE_USERNAME || !SITE_PASSWORD) return null;
+
+  console.log("\n🔐 PHASE 0 — Authenticating on target site...\n");
+  console.log(`   Login URL : ${SITE_LOGIN_URL}`);
+
+  const browser = await makeBrowser();
+  const ctx     = await makeContext(browser);
+  const page    = await ctx.newPage();
+
+  try {
+    await gotoPage(page, SITE_LOGIN_URL);
+
+    const userSelectors = [
+      ...(SITE_USERNAME_FIELD ? [`[name="${SITE_USERNAME_FIELD}"]`, `#${SITE_USERNAME_FIELD}`] : []),
+      'input[type="email"]', 'input[autocomplete="email"]', 'input[autocomplete="username"]',
+      'input[name="email"]', 'input[name="username"]', 'input[name="user"]',
+      'input[name="login"]', 'input[name="identifier"]', 'input[type="text"]',
+    ];
+    for (const sel of userSelectors) {
+      try { await page.fill(sel, SITE_USERNAME, { timeout: 1500 }); console.log("   ✓ Username filled"); break; }
+      catch {}
+    }
+
+    const passSelectors = [
+      ...(SITE_PASSWORD_FIELD ? [`[name="${SITE_PASSWORD_FIELD}"]`, `#${SITE_PASSWORD_FIELD}`] : []),
+      'input[type="password"]', 'input[name="password"]',
+      'input[name="pass"]',    'input[autocomplete="current-password"]',
+    ];
+    for (const sel of passSelectors) {
+      try { await page.fill(sel, SITE_PASSWORD, { timeout: 1500 }); console.log("   ✓ Password filled"); break; }
+      catch {}
+    }
+
+    const submitSelectors = [
+      'button[type="submit"]', 'input[type="submit"]',
+      'button:has-text("Sign in")', 'button:has-text("Log in")',
+      'button:has-text("Login")',   'button:has-text("Continue")',
+      '[type="submit"]',
+    ];
+    let submitted = false;
+    for (const sel of submitSelectors) {
+      try { await page.click(sel, { timeout: 2000 }); submitted = true; break; }
+      catch {}
+    }
+    if (!submitted) await page.keyboard.press("Enter");
+
+    await sleep(3000);
+
+    const storageState = await ctx.storageState();
+    const title = await page.title().catch(() => "");
+    console.log(`   ✓ Session captured — now on: "${title}"`);
+    console.log("\n✅ Authentication complete\n");
+
+    await browser.close();
+    return storageState;
+  } catch (err) {
+    console.log(`   ✗ Login failed: ${err.message.split("\n")[0]}`);
+    await browser.close();
+    return null;
+  }
 }
 
 // KEY FIX: use domcontentloaded (not networkidle) then wait a fixed time
@@ -75,10 +146,10 @@ async function gotoPage(page, url) {
 }
 
 // ─── Phase 1: Crawl ───────────────────────────────────────────────────────────
-async function crawl() {
+async function crawl(storageState = null) {
   console.log("\n🔍 PHASE 1 — Discovering pages...\n");
   const browser = await makeBrowser();
-  const ctx     = await makeContext(browser);
+  const ctx     = await makeContext(browser, storageState);
 
   const visited = new Set();
   const queue   = [normalizeUrl(TARGET_URL)];
@@ -125,12 +196,12 @@ async function crawl() {
 }
 
 // ─── Phase 2: Screenshot ──────────────────────────────────────────────────────
-async function screenshot(pages) {
+async function screenshot(pages, storageState = null) {
   console.log("📸 PHASE 2 — Taking screenshots...\n");
   fs.mkdirSync(SHOT_DIR, { recursive: true });
 
   const browser = await makeBrowser();
-  const ctx     = await makeContext(browser);
+  const ctx     = await makeContext(browser, storageState);
   const results = [];
 
   for (const { url, title } of pages) {
@@ -296,15 +367,19 @@ function report(analysed) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 (async () => {
-  console.log(`\n🚀 Web Vision Agent`);
+  console.log(`\n🕷️  The Crawler`);
   console.log(`   URL      : ${TARGET_URL}`);
   console.log(`   Max pages: ${MAX_PAGES}`);
-  console.log(`   Domain   : ${SAME_DOMAIN ? "same only" : "follow all"}\n`);
+  console.log(`   Domain   : ${SAME_DOMAIN ? "same only" : "follow all"}`);
+  if (SITE_LOGIN_URL) console.log(`   Auth     : ${SITE_LOGIN_URL}`);
+  console.log("");
 
-  const pages   = await crawl();
+  const storageState = await loginToSite();
+
+  const pages   = await crawl(storageState);
   if (!pages.length) { console.error("❌ No pages found. Try without --same-domain or check the URL."); process.exit(1); }
 
-  const shots   = await screenshot(pages);
+  const shots   = await screenshot(pages, storageState);
   const results = await analyse(shots);
   report(results);
 
